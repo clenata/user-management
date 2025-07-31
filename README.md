@@ -2,6 +2,7 @@
 - Backend: Java with Spring Boot
 - Frontend: React (with Vite)
 Database: MySQL
+
 Backend Setup
 ```bash
 cd backend/backend
