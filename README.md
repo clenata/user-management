@@ -42,7 +42,9 @@ CREATE TABLE users (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP(6) NOT NULL
 );
+
 Session Flow
+
 1. User logs in → Backend validates credentials
 2. Frontend stores auth state in localStorage
 3. Protected routes check localStorage on component mount
