@@ -1,0 +1,177 @@
+package com.usacco.backend.service;
+
+import com.usacco.backend.model.User;
+import com.usacco.backend.repository.UserRepository;
+import com.usacco.backend.exception.UserNotFoundException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Implementation of UserService interface providing user management functionality.
+ */
+@Service
+@Transactional
+public class UserServiceImpl implements UserService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Autowired
+    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public User registerUser(User user) {
+        // Validate input
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null");
+        }
+        if (user.getUsername() == null || user.getUsername().trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be null or empty");
+        }
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            throw new IllegalArgumentException("Email cannot be null or empty");
+        }
+        if (user.getPassword() == null || user.getPassword().trim().isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be null or empty");
+        }
+
+        // Check if username already exists
+        if (userRepository.findByUsername(user.getUsername()).isPresent()) {
+            throw new RuntimeException("Username already exists: " + user.getUsername());
+        }
+
+        // Check if email already exists
+        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
+            throw new RuntimeException("Email already exists: " + user.getEmail());
+        }
+
+        // Hash the password
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        
+        // Set creation timestamp
+        user.setCreatedAt(LocalDateTime.now());
+        
+        // Ensure user is not marked as deleted
+        user.setDeleted(false);
+
+        return userRepository.save(user);
+    }
+
+    @Override
+    public boolean authenticate(String username, String password) {
+        // Validate input
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be null or empty");
+        }
+        if (password == null || password.trim().isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be null or empty");
+        }
+
+        // Find user by username
+        Optional<User> userOptional = userRepository.findByUsername(username);
+        if (userOptional.isEmpty()) {
+            return false;
+        }
+
+        User user = userOptional.get();
+        
+        // Check if user is deleted
+        if (user.isDeleted()) {
+            return false;
+        }
+
+        // Verify password
+        return passwordEncoder.matches(password, user.getPassword());
+    }
+
+    @Override
+    public List<User> getAllUsers() {
+        return userRepository.findByIsDeletedFalse();
+    }
+
+    @Override
+    public User getUserById(Long id) {
+        if (id == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        Optional<User> userOptional = userRepository.findById(id);
+        if (userOptional.isEmpty()) {
+            throw new UserNotFoundException("User not found with ID: " + id);
+        }
+
+        User user = userOptional.get();
+        if (user.isDeleted()) {
+            throw new UserNotFoundException("User with ID " + id + " has been deleted");
+        }
+
+        return user;
+    }
+
+    @Override
+    public User updateUser(Long id, User updatedUser) {
+        if (id == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        if (updatedUser == null) {
+            throw new IllegalArgumentException("Updated user cannot be null");
+        }
+
+        // Get existing user
+        User existingUser = getUserById(id);
+
+        // Check if username is being changed and if it conflicts
+        if (updatedUser.getUsername() != null && 
+            !updatedUser.getUsername().equals(existingUser.getUsername())) {
+            Optional<User> conflictingUser = userRepository.findByUsername(updatedUser.getUsername());
+            if (conflictingUser.isPresent()) {
+                throw new RuntimeException("Username already exists: " + updatedUser.getUsername());
+            }
+        }
+
+        // Check if email is being changed and if it conflicts
+        if (updatedUser.getEmail() != null && 
+            !updatedUser.getEmail().equals(existingUser.getEmail())) {
+            Optional<User> conflictingUser = userRepository.findByEmail(updatedUser.getEmail());
+            if (conflictingUser.isPresent()) {
+                throw new RuntimeException("Email already exists: " + updatedUser.getEmail());
+            }
+        }
+
+        // Update fields (excluding password, createdAt, and isDeleted)
+        if (updatedUser.getFirstName() != null) {
+            existingUser.setFirstName(updatedUser.getFirstName());
+        }
+        if (updatedUser.getLastName() != null) {
+            existingUser.setLastName(updatedUser.getLastName());
+        }
+        if (updatedUser.getEmail() != null) {
+            existingUser.setEmail(updatedUser.getEmail());
+        }
+        if (updatedUser.getUsername() != null) {
+            existingUser.setUsername(updatedUser.getUsername());
+        }
+
+        return userRepository.save(existingUser);
+    }
+
+    @Override
+    public void softDeleteUser(Long id) {
+        if (id == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        User user = getUserById(id);
+        user.setDeleted(true);
+        userRepository.save(user);
+    }
+}
